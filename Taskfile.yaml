@@ -66,3 +66,8 @@ tasks:
     desc: "Alias for status"
     cmds:
       - task: status
+
+  shell:dev:
+    desc: "Get a development shell"
+    cmds:
+      - nix develop --command zsh

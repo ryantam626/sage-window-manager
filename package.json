@@ -1,0 +1,8 @@
+{
+	"dependencies": {
+		"@girs/gnome-shell": "^48.0.4",
+		"@girs/meta-12": "12.0.0-4.0.0-beta.36",
+		"@girs/clutter-12": "12.0.0-4.0.0-beta.36",
+		"@girs/st-12": "12.0.0-4.0.0-beta.36"
+	}
+}
