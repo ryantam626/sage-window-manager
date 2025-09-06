@@ -1,0 +1,68 @@
+version: '3'
+
+vars:
+  EXTENSION_UUID: sage-window-manager@github.ryantam626
+  EXTENSION_DIR: "{{.HOME}}/.local/share/gnome-shell/extensions/{{.EXTENSION_UUID}}"
+  SOURCE_DIR: "{{.PWD}}"
+
+tasks:
+  symlink:
+    desc: Install extension via symlink (best for development)
+    cmds:
+      - rm -rf "{{.EXTENSION_DIR}}"
+      - ln -s "{{.SOURCE_DIR}}" "{{.EXTENSION_DIR}}"
+      - echo "🔗 Extension symlinked from {{.SOURCE_DIR}} to {{.EXTENSION_DIR}}"
+
+  enable:
+    desc: Enable extension
+    cmds:
+      - gnome-extensions enable "{{.EXTENSION_UUID}}"
+      - echo "🟢 Extension enabled"
+
+  disable:
+    desc: Disable extension
+    cmds:
+      - gnome-extensions disable "{{.EXTENSION_UUID}}"
+      - echo "🔴 Extension disabled"
+
+  reload:
+    desc: Reload extension (disable and enable)
+    cmds:
+      - task: disable
+      - sleep 0.5
+      - task: enable
+      - echo "🔄 Extension reloaded"
+
+  status:
+    desc: Show extension status
+    cmds:
+      - gnome-extensions info "{{.EXTENSION_UUID}}" || echo "❌ Extension not found"
+
+  logs:
+    desc: Watch GNOME Shell logs
+    cmds:
+      - journalctl -f -o cat /usr/bin/gnome-shell
+
+
+  dev-setup:
+    desc: Setup development environment (symlink + enable)
+    cmds:
+      - task: symlink
+      - task: enable
+      - echo "🚀 Development environment ready!"
+
+  # Aliases for common workflows
+  dev:
+    desc: "Alias for dev-setup"
+    cmds:
+      - task: dev-setup
+
+  r:
+    desc: "Alias for reload"
+    cmds:
+      - task: reload
+
+  s:
+    desc: "Alias for status"
+    cmds:
+      - task: status
