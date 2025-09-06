@@ -1,0 +1,8 @@
+{
+  "name": "Sage Window Manager",
+  "description": "My own window manager",
+  "uuid": "sage-window-manager@github.ryantam626",
+  "shell-version": [
+    "46"
+  ]
+}
