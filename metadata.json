@@ -4,5 +4,6 @@
   "uuid": "sage-window-manager@github.ryantam626",
   "shell-version": [
     "46"
-  ]
+  ],
+  "settings-schema": "org.gnome.shell.extensions.sage-window-manager"
 }

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+    <schema id="org.gnome.shell.extensions.sage-window-manager" path="/org/gnome/shell/extensions/sage-window-manager/">
+        <key name="sage-cycle-windows-forward" type="as">
+            <default>["&lt;Super&gt;J"]</default>
+            <summary>Cycle windows forward</summary>
+            <description>Keybinding to cycle through windows in forward direction</description>
+        </key>
+        <key name="sage-cycle-windows-backward" type="as">
+            <default>["&lt;Super&gt;K"]</default>
+            <summary>Cycle windows backward</summary>
+            <description>Keybinding to cycle through windows in backward direction</description>
+        </key>
+    </schema>
+</schemalist>
