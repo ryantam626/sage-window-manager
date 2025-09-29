@@ -2,6 +2,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
+import * as WorkspaceSwitcherPopup from 'resource:///org/gnome/shell/ui/workspaceSwitcherPopup.js';
 
 import Meta from 'gi://Meta';
 
@@ -322,6 +323,7 @@ export default class SageWindowManagerExtension extends Extension {
     constructor(metadata) {
         super(metadata);
         this._windowCycler = null;
+        this._originalWorkspaceSwitcherDisplay = null;  // ADD THIS LINE
     }
 
     enable() {
@@ -329,6 +331,7 @@ export default class SageWindowManagerExtension extends Extension {
         this._windowCycler = new SimpleWindowCycler();
         this._windowCycler.enable();
         this._addKeybindings();
+        this._disableWorkspaceSwitcherPopup();
     }
 
     disable() {
@@ -338,6 +341,7 @@ export default class SageWindowManagerExtension extends Extension {
             this._windowCycler = null;
         }
         this._removeKeybindings();
+        this._restoreWorkspaceSwitcherPopup();
     }
 
     // Exposed methods for external binding
@@ -379,5 +383,19 @@ export default class SageWindowManagerExtension extends Extension {
         Main.wm.removeKeybinding('sage-cycle-windows-forward');
         Main.wm.removeKeybinding('sage-cycle-windows-backward');
         console.log('Keybindings removed');
+    }
+
+    _disableWorkspaceSwitcherPopup() {
+        this._originalDisplay = WorkspaceSwitcherPopup.WorkspaceSwitcherPopup.prototype.display;
+        WorkspaceSwitcherPopup.WorkspaceSwitcherPopup.prototype.display = function() {};
+        console.log('Workspace switcher popup disabled');
+    }
+
+    _restoreWorkspaceSwitcherPopup() {
+        if (this._originalDisplay) {
+            WorkspaceSwitcherPopup.WorkspaceSwitcherPopup.prototype.display = this._originalDisplay;
+            this._originalDisplay = null;
+            console.log('Workspace switcher popup restored');
+        }
     }
 }
