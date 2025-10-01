@@ -303,23 +303,6 @@ class SimpleWindowCycler {
         window.raise();
         window.focus(timestamp);
     }
-
-    // Debug method
-    dumpState() {
-        const currentMonitor = global.display.get_current_monitor();
-        const currentWorkspace = global.workspace_manager.get_active_workspace();
-        const windows = this._getEligibleWindows(currentWorkspace, currentMonitor);
-
-        console.log('=== Simple Window Cycler State ===');
-        console.log(`Current Monitor: ${currentMonitor}`);
-        console.log(`Current Workspace: ${currentWorkspace.index()}`);
-        console.log(`Manageable Windows: ${windows.length}`);
-
-        windows.forEach((window, index) => {
-            const focused = window === global.display.get_focus_window() ? ' [FOCUSED]' : '';
-            console.log(`  ${index}: ${window.get_title()}${focused}`);
-        });
-    }
 }
 
 export default class SageWindowManagerExtension extends Extension {
