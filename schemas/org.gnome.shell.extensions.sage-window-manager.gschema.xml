@@ -11,5 +11,25 @@
             <summary>Cycle windows backward</summary>
             <description>Keybinding to cycle through windows in backward direction</description>
         </key>
+        <key name="sage-move-to-workspace-1" type="as">
+            <default><![CDATA[['<Shift><Super>1']]]></default>
+            <summary>Move window to workspace 1</summary>
+        </key>
+        <key name="sage-move-to-workspace-2" type="as">
+            <default><![CDATA[['<Shift><Super>2']]]></default>
+            <summary>Move window to workspace 2</summary>
+        </key>
+        <key name="sage-move-to-workspace-3" type="as">
+            <default><![CDATA[['<Shift><Super>3']]]></default>
+            <summary>Move window to workspace 3</summary>
+        </key>
+        <key name="sage-move-to-workspace-4" type="as">
+            <default><![CDATA[['<Shift><Super>4']]]></default>
+            <summary>Move window to workspace 4</summary>
+        </key>
+        <key name="sage-move-to-workspace-5" type="as">
+            <default><![CDATA[['<Shift><Super>5']]]></default>
+            <summary>Move window to workspace 5</summary>
+        </key>
     </schema>
 </schemalist>

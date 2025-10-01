@@ -7,6 +7,9 @@ import * as WorkspaceSwitcherPopup from 'resource:///org/gnome/shell/ui/workspac
 import Meta from 'gi://Meta';
 
 
+const MAX_WORKSPACES = 5;
+
+
 /**
  * @param {import('@girs/meta-12').Meta.Window} window
  * @returns {boolean}
@@ -305,17 +308,78 @@ class SimpleWindowCycler {
     }
 }
 
+
+class WindowWorkspaceMover {
+    constructor() {
+        console.log('WindowWorkspaceMover: initialized');
+    }
+
+    enable() {
+        console.log('WindowWorkspaceMover: enabled');
+    }
+
+    disable() {
+        console.log('WindowWorkspaceMover: disabled');
+    }
+
+    /**
+     * Move the focused window to a specific workspace without switching to it
+     * @param {number} workspaceIndex - Zero-based workspace index
+     * @returns {boolean} - True if successful, false otherwise
+     */
+    moveToWorkspace(workspaceIndex) {
+        const focusedWindow = global.display.get_focus_window();
+
+        if (!focusedWindow) {
+            console.log('No focused window to move');
+            return false;
+        }
+
+        if (!_shouldManageWindow(focusedWindow)) {
+            console.log('Window is not manageable');
+            return false;
+        }
+
+        const workspaceManager = global.workspace_manager;
+        const targetWorkspace = workspaceManager.get_workspace_by_index(workspaceIndex);
+
+        if (!targetWorkspace) {
+            console.log(`Invalid workspace index: ${workspaceIndex}`);
+            return false;
+        }
+
+        // Check if window is already on target workspace
+        if (focusedWindow.get_workspace() === targetWorkspace) {
+            console.log('Window is already on target workspace');
+            return false;
+        }
+
+        // Move window without switching workspace
+        focusedWindow.change_workspace(targetWorkspace);
+
+        // Critical: Do NOT call targetWorkspace.activate() or activate_with_focus()
+        // This keeps the user on the current workspace
+
+        console.log(`Moved "${focusedWindow.get_title()}" to workspace ${workspaceIndex + 1}`);
+        return true;
+    }
+}
+
+
 export default class SageWindowManagerExtension extends Extension {
     constructor(metadata) {
         super(metadata);
         this._windowCycler = null;
+        this._windowMover = null;
         this._originalWorkspaceSwitcherDisplay = null;  // ADD THIS LINE
     }
 
     enable() {
         console.log('Sage Window Manager Extension: enabled');
         this._windowCycler = new SimpleWindowCycler();
+        this._windowMover = new WindowWorkspaceMover();
         this._windowCycler.enable();
+        this._windowMover.enable();
         this._addKeybindings();
         this._disableWorkspaceSwitcherPopup();
     }
@@ -325,6 +389,10 @@ export default class SageWindowManagerExtension extends Extension {
         if (this._windowCycler) {
             this._windowCycler.disable();
             this._windowCycler = null;
+        }
+        if (this._windowMover) {
+            this._windowMover.disable();
+            this._windowMover = null;
         }
         this._removeKeybindings();
         this._restoreWorkspaceSwitcherPopup();
@@ -340,6 +408,13 @@ export default class SageWindowManagerExtension extends Extension {
     cycleWindowsBackward() {
         if (this._windowCycler) {
             this._windowCycler.cycleBackward();
+        }
+    }
+
+    moveToWorkspace(index) {
+        console.log("hello");
+        if (this._windowMover) {
+            this._windowMover.moveToWorkspace(index);
         }
     }
 
@@ -362,12 +437,26 @@ export default class SageWindowManagerExtension extends Extension {
             this.cycleWindowsBackward.bind(this),
         );
 
+        for (let i = 0; i < MAX_WORKSPACES; i++) {
+            const keybindingName = `sage-move-to-workspace-${i + 1}`;
+            Main.wm.addKeybinding(
+                keybindingName,
+                this.getSettings(),
+                Meta.KeyBindingFlags.NONE,
+                Shell.ActionMode.NORMAL,
+                () => this.moveToWorkspace(i)
+            );
+        }
         console.log('Keybindings added');
     }
 
     _removeKeybindings() {
         Main.wm.removeKeybinding('sage-cycle-windows-forward');
         Main.wm.removeKeybinding('sage-cycle-windows-backward');
+        for (let i = 0; i < MAX_WORKSPACES; i++) {
+            const keybindingName = `sage-move-to-workspace-${i + 1}`;
+            Main.wm.removeKeybinding(keybindingName);
+        }
         console.log('Keybindings removed');
     }
 
