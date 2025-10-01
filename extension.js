@@ -41,6 +41,29 @@ function _shouldManageWindow(window) {
 }
 
 
+/**
+ * Get window that's eligible to be managed.
+ * @param workspace - Mutter workspace
+ * @param monitor - Mutter monitor (nullable)
+ * @returns {*} Windows
+ */
+function _getEligibleWindows(workspace, monitor) {
+    const windows = workspace.list_windows();
+
+    return windows.filter(window => {
+        return (
+            ((monitor != null) && (window.get_monitor() === monitor)) &&
+            _shouldManageWindow(window) &&
+            window.showing_on_its_workspace() &&
+            !window.minimized
+        );
+    }).sort((a, b) => {
+        // Sort by stacking order (most recently used first)
+        return b.get_stable_sequence() - a.get_stable_sequence();
+    });
+}
+
+
 class SimpleWindowCycler {
 
     constructor() {
@@ -231,7 +254,7 @@ class SimpleWindowCycler {
         const currentWorkspace = global.workspace_manager.get_active_workspace();
 
         // Get all windows on current workspace and monitor
-        const windows = this._getEligibleWindows(currentWorkspace, currentMonitor);
+        const windows = _getEligibleWindows(currentWorkspace, currentMonitor);
 
         if (windows.length === 0) {
             console.log('Not enough windows to cycle');
@@ -261,29 +284,6 @@ class SimpleWindowCycler {
 
         console.log(`Cycled ${direction}: ${nextWindow.get_title()}`);
     }
-
-    /**
-     * Get window that's eligible to be managed.
-     * @param workspace - Mutter workspace
-     * @param monitor - Mutter monitor (nullable)
-     * @returns {*} Windows
-     */
-    _getEligibleWindows(workspace, monitor) {
-        const windows = workspace.list_windows();
-
-        return windows.filter(window => {
-            return (
-                ((monitor != null) && (window.get_monitor() === monitor)) &&
-                _shouldManageWindow(window) &&
-                window.showing_on_its_workspace() &&
-                !window.minimized
-            );
-        }).sort((a, b) => {
-            // Sort by stacking order (most recently used first)
-            return b.get_stable_sequence() - a.get_stable_sequence();
-        });
-    }
-
 
     _focusWindow(window) {
         const timestamp = global.get_current_time();
