@@ -6,6 +6,41 @@ import * as WorkspaceSwitcherPopup from 'resource:///org/gnome/shell/ui/workspac
 
 import Meta from 'gi://Meta';
 
+
+/**
+ * @param {import('@girs/meta-12').Meta.Window} window
+ * @returns {boolean}
+ */
+function _shouldManageWindow(window) {
+    if (!window) return false;
+
+    // Skip special window types
+    const windowType = window.get_window_type();
+    const skipTypes = [
+        Meta.WindowType.DESKTOP,
+        Meta.WindowType.DOCK,
+        Meta.WindowType.TOOLBAR,
+        Meta.WindowType.MENU,
+        Meta.WindowType.UTILITY,
+        Meta.WindowType.SPLASHSCREEN,
+        Meta.WindowType.DROPDOWN_MENU,
+        Meta.WindowType.POPUP_MENU,
+        Meta.WindowType.TOOLTIP,
+        Meta.WindowType.NOTIFICATION,
+        Meta.WindowType.COMBO,
+        Meta.WindowType.DND,
+        Meta.WindowType.OVERRIDE_OTHER
+    ];
+
+    return (
+        !skipTypes.includes(windowType) &&
+        !window.is_skip_taskbar() &&
+        window.get_title() !== '' &&
+        !window.is_hidden()
+    );
+}
+
+
 class SimpleWindowCycler {
 
     constructor() {
@@ -239,7 +274,7 @@ class SimpleWindowCycler {
         return windows.filter(window => {
             return (
                 ((monitor != null) && (window.get_monitor() === monitor)) &&
-                this._shouldManageWindow(window) &&
+                _shouldManageWindow(window) &&
                 window.showing_on_its_workspace() &&
                 !window.minimized
             );
@@ -249,38 +284,6 @@ class SimpleWindowCycler {
         });
     }
 
-    /**
-     * @param {import('@girs/meta-12').Meta.Window} window
-     * @returns {boolean}
-     */
-    _shouldManageWindow(window) {
-        if (!window) return false;
-
-        // Skip special window types
-        const windowType = window.get_window_type();
-        const skipTypes = [
-            Meta.WindowType.DESKTOP,
-            Meta.WindowType.DOCK,
-            Meta.WindowType.TOOLBAR,
-            Meta.WindowType.MENU,
-            Meta.WindowType.UTILITY,
-            Meta.WindowType.SPLASHSCREEN,
-            Meta.WindowType.DROPDOWN_MENU,
-            Meta.WindowType.POPUP_MENU,
-            Meta.WindowType.TOOLTIP,
-            Meta.WindowType.NOTIFICATION,
-            Meta.WindowType.COMBO,
-            Meta.WindowType.DND,
-            Meta.WindowType.OVERRIDE_OTHER
-        ];
-
-        return (
-            !skipTypes.includes(windowType) &&
-            !window.is_skip_taskbar() &&
-            window.get_title() !== '' &&
-            !window.is_hidden()
-        );
-    }
 
     _focusWindow(window) {
         const timestamp = global.get_current_time();
