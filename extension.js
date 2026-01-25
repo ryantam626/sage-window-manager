@@ -1,7 +1,6 @@
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import Shell from 'gi://Shell';
-import St from 'gi://St';
 import * as WorkspaceSwitcherPopup from 'resource:///org/gnome/shell/ui/workspaceSwitcherPopup.js';
 
 import Meta from 'gi://Meta';
@@ -70,55 +69,16 @@ function _getEligibleWindows(workspace, monitor) {
 class SimpleWindowCycler {
 
     constructor() {
-        this._highlightedWindow = null;
-        this._borderWidget = null;
-        this._windowSignals = [];
         this._focusSignalId = null;
         this._workspaceSignalId = null;
         this._windowStateSignalId = null;
         this._windowCreatedSignalId = null;
-        this._restackSignalId = null;
-        this._unmaximizeTimeout = null;
     }
 
     enable() {
         console.log('Simple Window Cycler: enabled');
-
-        this._focusSignalId = global.display.connect('notify::focus-window', this._onFocusChanged.bind(this));
-        this._workspaceSignalId = global.workspace_manager.connect('active-workspace-changed', this._onFocusChanged.bind(this));
-
-        // Listen for any window maximize state changes globally
-        this._windowStateSignalId = global.display.connect('window-demands-attention', this._onWindowStateChanged.bind(this));
-        this._windowCreatedSignalId = global.display.connect('window-created', (display, window) => {
-            // Connect to each new window's maximize signals
-            window.connect('notify::maximized-horizontally', () => this._onWindowStateChanged());
-            window.connect('notify::maximized-vertically', () => this._onWindowStateChanged());
-        });
-
-        // Connect to existing windows
-        global.get_window_actors().forEach(actor => {
-            const window = actor.get_meta_window();
-            if (window) {
-                window.connect('notify::maximized-horizontally', () => this._onWindowStateChanged());
-                window.connect('notify::maximized-vertically', () => this._onWindowStateChanged());
-            }
-        });
     }
 
-    _onWindowStateChanged() {
-        const currentFocus = global.display.get_focus_window();
-
-        if (currentFocus) {
-            if (currentFocus.get_maximized()) {
-                this._clearHighlights();
-            } else if (currentFocus === this._highlightedWindow) {
-                // Window was unmaximized and is still our highlighted window, do nothing
-            } else {
-                // Window was unmaximized and now focused, highlight it with delay
-                this._highlightWindow(currentFocus, true); // Pass flag indicating unmaximize
-            }
-        }
-    }
     disable() {
         console.log('Simple Window Cycler: disabled');
 
@@ -139,110 +99,7 @@ class SimpleWindowCycler {
             global.display.disconnect(this._windowCreatedSignalId);
             this._windowCreatedSignalId = null;
         }
-        this._clearHighlights();
     }
-    _onFocusChanged() {
-        const currentFocus = global.display.get_focus_window();
-
-        if (currentFocus !== this._highlightedWindow) {
-            this._clearHighlights();
-        }
-
-        if (currentFocus) {
-            this._highlightWindow(currentFocus, false);
-        }
-    }
-
-    _highlightWindow(window, isUnmaximize = false) {
-        if (!window || window.get_maximized()) {
-            this._clearHighlights();
-            return;
-        }
-
-        this._clearHighlights();
-
-        if (isUnmaximize) {
-            // Delay only for unmaximize events to let animation finish
-            this._unmaximizeTimeout = setTimeout(() => {
-                this._createBorder(window);
-            }, 250); // Adjust timing as needed
-        } else {
-            // Normal focus change, create border immediately
-            this._createBorder(window);
-        }
-    }
-
-    _createBorder(window) {
-        // Check again in case window state changed during animation
-        if (!window || window.get_maximized()) {
-            return;
-        }
-
-        this._borderWidget = new St.Bin({
-            style: `
-        border: 3px solid #88c0d0;
-        border-radius: 6px;
-        background: transparent;
-        pointer-events: none;
-    `
-        });
-
-        this._updateBorderLayout(window);
-
-        global.window_group.add_child(this._borderWidget);
-        global.window_group.set_child_above_sibling(this._borderWidget, window.get_compositor_private());
-
-        // Listen for restacking to maintain proper z-order
-        this._restackSignalId = global.display.connect('restacked', () => {
-            if (this._borderWidget && this._highlightedWindow) {
-                const actor = this._highlightedWindow.get_compositor_private();
-                global.window_group.set_child_above_sibling(this._borderWidget, actor);
-            }
-        });
-
-        this._highlightedWindow = window;
-        this._windowSignals = [
-            window.connect('size-changed', () => this._updateBorderLayout(window)),
-            window.connect('position-changed', () => this._updateBorderLayout(window))
-        ];
-    }
-
-    _updateBorderLayout(window) {
-        if (!this._borderWidget) return;
-
-        const rect = window.get_frame_rect();
-        this._borderWidget.set_position(rect.x - 3, rect.y - 3);
-        this._borderWidget.set_size(rect.width + 6, rect.height + 6);
-    }
-
-    _clearHighlights() {
-        if (this._unmaximizeTimeout) {
-            clearTimeout(this._unmaximizeTimeout);
-            this._unmaximizeTimeout = null;
-        }
-
-        // Disconnect restack signal
-        if (this._restackSignalId) {
-            global.display.disconnect(this._restackSignalId);
-            this._restackSignalId = null;
-        }
-
-        if (this._windowSignals.length > 0 && this._highlightedWindow) {
-            this._windowSignals.forEach(id => {
-                this._highlightedWindow.disconnect(id);
-            });
-            this._windowSignals = [];
-        }
-
-        if (this._borderWidget) {
-            global.window_group.remove_child(this._borderWidget);
-            this._borderWidget.destroy();
-            this._borderWidget = null;
-        }
-
-        this._highlightedWindow = null;
-    }
-
 
     cycleForward() {
         this._cycleWindows('forward');
@@ -371,7 +228,6 @@ export default class SageWindowManagerExtension extends Extension {
         super(metadata);
         this._windowCycler = null;
         this._windowMover = null;
-        this._originalWorkspaceSwitcherDisplay = null;  // ADD THIS LINE
     }
 
     enable() {
