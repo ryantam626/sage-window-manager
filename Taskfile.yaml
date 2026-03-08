@@ -43,6 +43,10 @@ tasks:
     cmds:
       - journalctl -f -o cat /usr/bin/gnome-shell
 
+  glib-compile-schemas:
+    desc: Compile GSettings schemas
+    cmds:
+      - glib-compile-schemas schemas
 
   dev-setup:
     desc: Setup development environment (symlink + enable)
