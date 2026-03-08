@@ -56,19 +56,53 @@ function _shouldManageWindow(window, {allowHidden = false} = {}) {
  * @returns {*} Windows
  */
 function _getEligibleWindows(workspace, monitor) {
-    const windows = workspace.list_windows();
-
-    return windows.filter(window => {
-        return (
-            ((monitor != null) && (window.get_monitor() === monitor)) &&
-            _shouldManageWindow(window) &&
-            window.showing_on_its_workspace() &&
-            !window.minimized
-        );
-    }).sort((a, b) => {
-        // Sort by stacking order (most recently used first)
-        return b.get_stable_sequence() - a.get_stable_sequence();
+    return _listManageableWindows(workspace, monitor, {
+        allowHidden: false,
+        allowMinimized: false,
+        requireVisibleOnWorkspace: true,
     });
+}
+
+
+function _sortByMostRecent(windows) {
+    return windows.sort((a, b) => b.get_stable_sequence() - a.get_stable_sequence());
+}
+
+
+/**
+ * @param workspace - Mutter workspace
+ * @param monitor - Mutter monitor (nullable)
+ * @param {{allowHidden?: boolean, allowMinimized?: boolean, requireVisibleOnWorkspace?: boolean}} options
+ * @returns {*} Windows
+ */
+function _listManageableWindows(
+    workspace,
+    monitor,
+    {
+        allowHidden = false,
+        allowMinimized = true,
+        requireVisibleOnWorkspace = false,
+    } = {}
+) {
+    return _sortByMostRecent(workspace.list_windows().filter(window => {
+        if (monitor != null && window.get_monitor() !== monitor) {
+            return false;
+        }
+
+        if (!_shouldManageWindow(window, {allowHidden})) {
+            return false;
+        }
+
+        if (!allowMinimized && window.minimized) {
+            return false;
+        }
+
+        if (requireVisibleOnWorkspace && !window.showing_on_its_workspace()) {
+            return false;
+        }
+
+        return true;
+    }));
 }
 
 
@@ -146,6 +180,10 @@ class SimpleWindowCycler {
         // transiently hidden during workspace transition animations.
         window.activate(timestamp);
         this._showFocusBorder(window);
+    }
+
+    focusWindow(window) {
+        this._focusWindow(window);
     }
 
     _showFocusBorder(window) {
@@ -279,10 +317,10 @@ class WindowScreenManager {
      * @returns {*} Windows
      */
     _getMonitorWindows(workspace, monitor, {allowHidden = false} = {}) {
-        return workspace.list_windows().filter(window => {
-            return window.get_monitor() === monitor && _shouldManageWindow(window, {allowHidden});
-        }).sort((a, b) => {
-            return b.get_stable_sequence() - a.get_stable_sequence();
+        return _listManageableWindows(workspace, monitor, {
+            allowHidden,
+            allowMinimized: true,
+            requireVisibleOnWorkspace: false,
         });
     }
 
@@ -377,7 +415,7 @@ class WindowScreenManager {
             return false;
         }
 
-        this._windowCycler._focusWindow(windows[0]);
+        this._windowCycler.focusWindow(windows[0]);
         console.log(`Focused screen ${monitorIndex + 1} (monitor ${targetMonitor + 1})`);
         return true;
     }
