@@ -588,20 +588,26 @@ export default class SageWindowManagerExtension extends Extension {
 
     moveToWorkspace(index) {
         if (this._windowMover) {
-            this._windowMover.moveToWorkspace(index);
+            return this._windowMover.moveToWorkspace(index);
         }
+
+        return false;
     }
 
     sendWindowToScreen(index) {
         if (this._screenManager) {
-            this._screenManager.sendWindowToScreen(index);
+            return this._screenManager.sendWindowToScreen(index);
         }
+
+        return false;
     }
 
     focusScreen(index) {
         if (this._screenManager) {
-            this._screenManager.focusScreen(index);
+            return this._screenManager.focusScreen(index);
         }
+
+        return false;
     }
 
     _addKeybindings() {
