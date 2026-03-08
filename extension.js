@@ -2,6 +2,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import Shell from 'gi://Shell';
 import * as WorkspaceSwitcherPopup from 'resource:///org/gnome/shell/ui/workspaceSwitcherPopup.js';
+import St from 'gi://St';
 
 import Meta from 'gi://Meta';
 import GLib from 'gi://GLib';
@@ -25,6 +26,8 @@ const WINDOW_SKIP_TYPES = [
     Meta.WindowType.DND,
     Meta.WindowType.OVERRIDE_OTHER,
 ];
+const FOCUS_BORDER_HOLD_MS = 450;
+const FOCUS_BORDER_FADE_MS = 180;
 
 
 /**
@@ -70,11 +73,17 @@ function _getEligibleWindows(workspace, monitor) {
 
 
 class SimpleWindowCycler {
+    constructor() {
+        this._focusBorderActor = null;
+        this._focusBorderTimeoutId = null;
+    }
+
     enable() {
         console.log('Simple Window Cycler: enabled');
     }
 
     disable() {
+        this._clearFocusBorder();
         console.log('Simple Window Cycler: disabled');
     }
 
@@ -136,6 +145,65 @@ class SimpleWindowCycler {
         // Activate is more reliable than plain focus/raise when a window is
         // transiently hidden during workspace transition animations.
         window.activate(timestamp);
+        this._showFocusBorder(window);
+    }
+
+    _showFocusBorder(window) {
+        const rect = window.get_frame_rect();
+        const padding = 5;
+
+        if (!this._focusBorderActor) {
+            this._focusBorderActor = new St.Widget({
+                style_class: 'sage-focus-border',
+                reactive: false,
+                can_focus: false,
+            });
+            Main.uiGroup.add_child(this._focusBorderActor);
+        }
+
+        this._focusBorderActor.remove_all_transitions();
+        this._focusBorderActor.set_position(rect.x, rect.y);
+        this._focusBorderActor.set_size(rect.width, rect.height);
+        this._focusBorderActor.opacity = 255;
+        this._focusBorderActor.show();
+
+        if (this._focusBorderTimeoutId) {
+            GLib.source_remove(this._focusBorderTimeoutId);
+            this._focusBorderTimeoutId = null;
+        }
+
+        this._focusBorderTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FOCUS_BORDER_HOLD_MS, () => {
+            this._focusBorderTimeoutId = null;
+
+            if (!this._focusBorderActor) {
+                return GLib.SOURCE_REMOVE;
+            }
+
+            this._focusBorderActor.ease({
+                opacity: 0,
+                duration: FOCUS_BORDER_FADE_MS,
+                onComplete: () => {
+                    if (this._focusBorderActor) {
+                        this._focusBorderActor.hide();
+                    }
+                },
+            });
+
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _clearFocusBorder() {
+        if (this._focusBorderTimeoutId) {
+            GLib.source_remove(this._focusBorderTimeoutId);
+            this._focusBorderTimeoutId = null;
+        }
+
+        if (this._focusBorderActor) {
+            this._focusBorderActor.remove_all_transitions();
+            this._focusBorderActor.destroy();
+            this._focusBorderActor = null;
+        }
     }
 }
 
