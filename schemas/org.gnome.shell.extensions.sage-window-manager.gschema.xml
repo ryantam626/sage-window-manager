@@ -31,5 +31,45 @@
             <default><![CDATA[['<Shift><Super>5']]]></default>
             <summary>Move window to workspace 5</summary>
         </key>
+        <key name="sage-send-window-to-screen-1" type="as">
+            <default><![CDATA[['<Shift><Super>I']]]></default>
+            <summary>Send window to screen 1</summary>
+        </key>
+        <key name="sage-send-window-to-screen-2" type="as">
+            <default><![CDATA[['<Shift><Super>U']]]></default>
+            <summary>Send window to screen 2</summary>
+        </key>
+        <key name="sage-send-window-to-screen-3" type="as">
+            <default><![CDATA[['<Shift><Super>O']]]></default>
+            <summary>Send window to screen 3</summary>
+        </key>
+        <key name="sage-send-window-to-screen-4" type="as">
+            <default><![CDATA[['<Shift><Super>8']]]></default>
+            <summary>Send window to screen 4</summary>
+        </key>
+        <key name="sage-focus-screen-1" type="as">
+            <default><![CDATA[['<Super>I']]]></default>
+            <summary>Move focus to screen 1</summary>
+        </key>
+        <key name="sage-focus-screen-2" type="as">
+            <default><![CDATA[['<Super>U']]]></default>
+            <summary>Move focus to screen 2</summary>
+        </key>
+        <key name="sage-focus-screen-3" type="as">
+            <default><![CDATA[['<Super>O']]]></default>
+            <summary>Move focus to screen 3</summary>
+        </key>
+        <key name="sage-focus-screen-4" type="as">
+            <default><![CDATA[['<Super>8']]]></default>
+            <summary>Move focus to screen 4</summary>
+        </key>
+        <key name="screen-order" type="ai">
+            <default>[1, 0, 2, 3]</default>
+            <summary>Logical to physical monitor order mapping</summary>
+            <description>
+                Maps logical screen shortcuts (1-4) to physical monitor indexes.
+                Example: [1, 0, 2, 3] swaps the first two logical screens.
+            </description>
+        </key>
     </schema>
 </schemalist>

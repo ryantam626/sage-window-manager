@@ -4,9 +4,12 @@ import Shell from 'gi://Shell';
 import * as WorkspaceSwitcherPopup from 'resource:///org/gnome/shell/ui/workspaceSwitcherPopup.js';
 
 import Meta from 'gi://Meta';
+import GLib from 'gi://GLib';
 
 
 const MAX_WORKSPACES = 5;
+const MAX_SCREENS = 4;
+const SCREEN_ORDER_KEY = 'screen-order';
 
 
 /**
@@ -110,7 +113,8 @@ class SimpleWindowCycler {
     }
 
     _cycleWindows(direction) {
-        const currentMonitor = global.display.get_current_monitor();
+        const focusedWindow = global.display.get_focus_window();
+        const currentMonitor = focusedWindow ? focusedWindow.get_monitor() : global.display.get_current_monitor();
         const currentWorkspace = global.workspace_manager.get_active_workspace();
 
         // Get all windows on current workspace and monitor
@@ -122,17 +126,13 @@ class SimpleWindowCycler {
         }
 
         // Find currently focused window
-        const focusedWindow = global.display.get_focus_window();
         let currentIndex = windows.findIndex(w => w === focusedWindow);
-
-        // If no focused window found, start from first
-        if (currentIndex === -1) {
-            currentIndex = 0;
-        }
 
         // Calculate next window index
         let nextIndex;
-        if (direction === 'forward') {
+        if (currentIndex === -1) {
+            nextIndex = direction === 'forward' ? 0 : windows.length - 1;
+        } else if (direction === 'forward') {
             nextIndex = (currentIndex + 1) % windows.length;
         } else {
             nextIndex = (currentIndex - 1 + windows.length) % windows.length;
@@ -223,21 +223,141 @@ class WindowWorkspaceMover {
 }
 
 
+class WindowScreenManager {
+    constructor(windowCycler, settings) {
+        this._windowCycler = windowCycler;
+        this._settings = settings;
+    }
+
+    /**
+     * Get manageable windows on a monitor without visibility/minimized restrictions.
+     * @param workspace - Mutter workspace
+     * @param monitor - Mutter monitor
+     * @returns {*} Windows
+     */
+    _getMonitorWindows(workspace, monitor) {
+        return workspace.list_windows().filter(window => {
+            return window.get_monitor() === monitor && _shouldManageWindow(window);
+        }).sort((a, b) => {
+            return b.get_stable_sequence() - a.get_stable_sequence();
+        });
+    }
+
+    /**
+     * Resolve a logical screen index (keybinding order) into a physical monitor index.
+     * @param {number} screenIndex - Zero-based logical screen index.
+     * @returns {number}
+     */
+    _getPhysicalMonitorIndex(screenIndex) {
+        const monitorCount = global.display.get_n_monitors();
+
+        if (screenIndex < 0 || screenIndex >= monitorCount) {
+            return -1;
+        }
+
+        const configuredOrder = this._settings.get_value(SCREEN_ORDER_KEY).deep_unpack();
+        const configuredMonitor = configuredOrder[screenIndex];
+
+        if (!Number.isInteger(configuredMonitor)) {
+            return screenIndex;
+        }
+
+        if (configuredMonitor < 0 || configuredMonitor >= monitorCount) {
+            console.log(`Configured monitor index out of range for logical screen ${screenIndex + 1}: ${configuredMonitor}`);
+            return screenIndex;
+        }
+
+        return configuredMonitor;
+    }
+
+    /**
+     * Move the focused window to a specific monitor.
+     * @param {number} monitorIndex - Zero-based monitor index.
+     * @returns {boolean}
+     */
+    sendWindowToScreen(monitorIndex) {
+        const focusedWindow = global.display.get_focus_window();
+
+        if (!focusedWindow) {
+            console.log('No focused window to move to screen');
+            return false;
+        }
+
+        if (!_shouldManageWindow(focusedWindow)) {
+            console.log('Focused window is not manageable');
+            return false;
+        }
+
+        const targetMonitor = this._getPhysicalMonitorIndex(monitorIndex);
+        if (targetMonitor === -1) {
+            console.log(`Invalid logical screen index: ${monitorIndex}`);
+            return false;
+        }
+
+        if (focusedWindow.get_monitor() === targetMonitor) {
+            console.log('Window is already on target screen');
+            return false;
+        }
+
+        focusedWindow.move_to_monitor(targetMonitor);
+        console.log(`Moved "${focusedWindow.get_title()}" to screen ${monitorIndex + 1} (monitor ${targetMonitor + 1})`);
+        return true;
+    }
+
+    /**
+     * Move focus to a specific monitor by focusing the most recent window there.
+     * @param {number} monitorIndex - Zero-based monitor index.
+     * @returns {boolean}
+     */
+    focusScreen(monitorIndex) {
+        const targetMonitor = this._getPhysicalMonitorIndex(monitorIndex);
+        if (targetMonitor === -1) {
+            console.log(`Invalid logical screen index: ${monitorIndex}`);
+            return false;
+        }
+
+        const currentWorkspace = global.workspace_manager.get_active_workspace();
+        let windows = _getEligibleWindows(currentWorkspace, targetMonitor);
+
+        if (windows.length === 0) {
+            windows = this._getMonitorWindows(currentWorkspace, targetMonitor);
+        }
+
+        if (windows.length === 0) {
+            console.log(`No manageable windows on screen ${monitorIndex + 1} (monitor ${targetMonitor + 1})`);
+            return false;
+        }
+
+        this._windowCycler._focusWindow(windows[0]);
+        console.log(`Focused screen ${monitorIndex + 1} (monitor ${targetMonitor + 1})`);
+        return true;
+    }
+}
+
+
 export default class SageWindowManagerExtension extends Extension {
     constructor(metadata) {
         super(metadata);
         this._windowCycler = null;
         this._windowMover = null;
+        this._screenManager = null;
+        this._workspaceChangedSignalId = null;
+        this._workspaceFocusIdleId = null;
     }
 
     enable() {
         console.log('Sage Window Manager Extension: enabled');
         this._windowCycler = new SimpleWindowCycler();
         this._windowMover = new WindowWorkspaceMover();
+        this._screenManager = new WindowScreenManager(this._windowCycler, this.getSettings());
         this._windowCycler.enable();
         this._windowMover.enable();
         this._addKeybindings();
         this._disableWorkspaceSwitcherPopup();
+        this._workspaceChangedSignalId = global.workspace_manager.connect(
+            'active-workspace-changed',
+            this._onActiveWorkspaceChanged.bind(this)
+        );
     }
 
     disable() {
@@ -250,8 +370,30 @@ export default class SageWindowManagerExtension extends Extension {
             this._windowMover.disable();
             this._windowMover = null;
         }
+        this._screenManager = null;
+        if (this._workspaceChangedSignalId) {
+            global.workspace_manager.disconnect(this._workspaceChangedSignalId);
+            this._workspaceChangedSignalId = null;
+        }
+        if (this._workspaceFocusIdleId) {
+            GLib.source_remove(this._workspaceFocusIdleId);
+            this._workspaceFocusIdleId = null;
+        }
         this._removeKeybindings();
         this._restoreWorkspaceSwitcherPopup();
+    }
+
+    _onActiveWorkspaceChanged() {
+        if (this._workspaceFocusIdleId) {
+            GLib.source_remove(this._workspaceFocusIdleId);
+            this._workspaceFocusIdleId = null;
+        }
+
+        this._workspaceFocusIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._workspaceFocusIdleId = null;
+            this.focusScreen(0);
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     // Exposed methods for external binding
@@ -268,9 +410,20 @@ export default class SageWindowManagerExtension extends Extension {
     }
 
     moveToWorkspace(index) {
-        console.log("hello");
         if (this._windowMover) {
             this._windowMover.moveToWorkspace(index);
+        }
+    }
+
+    sendWindowToScreen(index) {
+        if (this._screenManager) {
+            this._screenManager.sendWindowToScreen(index);
+        }
+    }
+
+    focusScreen(index) {
+        if (this._screenManager) {
+            this._screenManager.focusScreen(index);
         }
     }
 
@@ -303,6 +456,26 @@ export default class SageWindowManagerExtension extends Extension {
                 () => this.moveToWorkspace(i)
             );
         }
+
+        for (let i = 0; i < MAX_SCREENS; i++) {
+            const moveKeybindingName = `sage-send-window-to-screen-${i + 1}`;
+            Main.wm.addKeybinding(
+                moveKeybindingName,
+                this.getSettings(),
+                Meta.KeyBindingFlags.NONE,
+                Shell.ActionMode.NORMAL,
+                () => this.sendWindowToScreen(i)
+            );
+
+            const focusKeybindingName = `sage-focus-screen-${i + 1}`;
+            Main.wm.addKeybinding(
+                focusKeybindingName,
+                this.getSettings(),
+                Meta.KeyBindingFlags.NONE,
+                Shell.ActionMode.NORMAL,
+                () => this.focusScreen(i)
+            );
+        }
         console.log('Keybindings added');
     }
 
@@ -312,6 +485,10 @@ export default class SageWindowManagerExtension extends Extension {
         for (let i = 0; i < MAX_WORKSPACES; i++) {
             const keybindingName = `sage-move-to-workspace-${i + 1}`;
             Main.wm.removeKeybinding(keybindingName);
+        }
+        for (let i = 0; i < MAX_SCREENS; i++) {
+            Main.wm.removeKeybinding(`sage-send-window-to-screen-${i + 1}`);
+            Main.wm.removeKeybinding(`sage-focus-screen-${i + 1}`);
         }
         console.log('Keybindings removed');
     }
