@@ -186,6 +186,15 @@ class SimpleWindowCycler {
         this._focusWindow(window);
     }
 
+    flashFocusBorder(window) {
+        if (!_shouldManageWindow(window, {allowHidden: true})) {
+            return false;
+        }
+
+        this._showFocusBorder(window);
+        return true;
+    }
+
     _showFocusBorder(window) {
         const rect = window.get_frame_rect();
         const padding = 5;
@@ -501,7 +510,13 @@ export default class SageWindowManagerExtension extends Extension {
                 return GLib.SOURCE_REMOVE;
             }
 
-            this.focusScreen(0);
+            const focusedTargetScreen = this.focusScreen(0);
+            if (!focusedTargetScreen) {
+                const focusedWindow = global.display.get_focus_window();
+                if (this._windowCycler) {
+                    this._windowCycler.flashFocusBorder(focusedWindow);
+                }
+            }
             return GLib.SOURCE_REMOVE;
         });
         this._workspaceFocusIdleId = sourceId;
