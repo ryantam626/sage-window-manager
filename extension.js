@@ -10,6 +10,21 @@ import GLib from 'gi://GLib';
 const MAX_WORKSPACES = 5;
 const MAX_SCREENS = 4;
 const SCREEN_ORDER_KEY = 'screen-order';
+const WINDOW_SKIP_TYPES = [
+    Meta.WindowType.DESKTOP,
+    Meta.WindowType.DOCK,
+    Meta.WindowType.TOOLBAR,
+    Meta.WindowType.MENU,
+    Meta.WindowType.UTILITY,
+    Meta.WindowType.SPLASHSCREEN,
+    Meta.WindowType.DROPDOWN_MENU,
+    Meta.WindowType.POPUP_MENU,
+    Meta.WindowType.TOOLTIP,
+    Meta.WindowType.NOTIFICATION,
+    Meta.WindowType.COMBO,
+    Meta.WindowType.DND,
+    Meta.WindowType.OVERRIDE_OTHER,
+];
 
 
 /**
@@ -19,26 +34,10 @@ const SCREEN_ORDER_KEY = 'screen-order';
 function _shouldManageWindow(window) {
     if (!window) return false;
 
-    // Skip special window types
     const windowType = window.get_window_type();
-    const skipTypes = [
-        Meta.WindowType.DESKTOP,
-        Meta.WindowType.DOCK,
-        Meta.WindowType.TOOLBAR,
-        Meta.WindowType.MENU,
-        Meta.WindowType.UTILITY,
-        Meta.WindowType.SPLASHSCREEN,
-        Meta.WindowType.DROPDOWN_MENU,
-        Meta.WindowType.POPUP_MENU,
-        Meta.WindowType.TOOLTIP,
-        Meta.WindowType.NOTIFICATION,
-        Meta.WindowType.COMBO,
-        Meta.WindowType.DND,
-        Meta.WindowType.OVERRIDE_OTHER
-    ];
 
     return (
-        !skipTypes.includes(windowType) &&
+        !WINDOW_SKIP_TYPES.includes(windowType) &&
         !window.is_skip_taskbar() &&
         window.get_title() !== '' &&
         !window.is_hidden()
@@ -70,38 +69,12 @@ function _getEligibleWindows(workspace, monitor) {
 
 
 class SimpleWindowCycler {
-
-    constructor() {
-        this._focusSignalId = null;
-        this._workspaceSignalId = null;
-        this._windowStateSignalId = null;
-        this._windowCreatedSignalId = null;
-    }
-
     enable() {
         console.log('Simple Window Cycler: enabled');
     }
 
     disable() {
         console.log('Simple Window Cycler: disabled');
-
-        if (this._focusSignalId) {
-            global.display.disconnect(this._focusSignalId);
-            this._focusSignalId = null;
-        }
-        if (this._workspaceSignalId) {
-            global.workspace_manager.disconnect(this._workspaceSignalId);
-            this._workspaceSignalId = null;
-        }
-
-        if (this._windowStateSignalId) {
-            global.display.disconnect(this._windowStateSignalId);
-            this._windowStateSignalId = null;
-        }
-        if (this._windowCreatedSignalId) {
-            global.display.disconnect(this._windowCreatedSignalId);
-            this._windowCreatedSignalId = null;
-        }
     }
 
     cycleForward() {
@@ -338,18 +311,22 @@ class WindowScreenManager {
 export default class SageWindowManagerExtension extends Extension {
     constructor(metadata) {
         super(metadata);
+        this._settings = null;
         this._windowCycler = null;
         this._windowMover = null;
         this._screenManager = null;
+        this._originalDisplay = null;
+        this._keybindingNames = [];
         this._workspaceChangedSignalId = null;
         this._workspaceFocusIdleId = null;
     }
 
     enable() {
         console.log('Sage Window Manager Extension: enabled');
+        this._settings = this.getSettings();
         this._windowCycler = new SimpleWindowCycler();
         this._windowMover = new WindowWorkspaceMover();
-        this._screenManager = new WindowScreenManager(this._windowCycler, this.getSettings());
+        this._screenManager = new WindowScreenManager(this._windowCycler, this._settings);
         this._windowCycler.enable();
         this._windowMover.enable();
         this._addKeybindings();
@@ -371,6 +348,7 @@ export default class SageWindowManagerExtension extends Extension {
             this._windowMover = null;
         }
         this._screenManager = null;
+        this._settings = null;
         if (this._workspaceChangedSignalId) {
             global.workspace_manager.disconnect(this._workspaceChangedSignalId);
             this._workspaceChangedSignalId = null;
@@ -428,19 +406,15 @@ export default class SageWindowManagerExtension extends Extension {
     }
 
     _addKeybindings() {
-        // Add keybinding for cycling windows forward
-        Main.wm.addKeybinding(
+        this._addKeybinding(
             'sage-cycle-windows-forward',
-            this.getSettings(),
             Meta.KeyBindingFlags.NONE,
             Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
             this.cycleWindowsForward.bind(this),
         );
 
-        // Add keybinding for cycling windows backward
-        Main.wm.addKeybinding(
+        this._addKeybinding(
             'sage-cycle-windows-backward',
-            this.getSettings(),
             Meta.KeyBindingFlags.NONE,
             Shell.ActionMode.NORMAL | Shell.ActionMode.OVERVIEW,
             this.cycleWindowsBackward.bind(this),
@@ -448,9 +422,8 @@ export default class SageWindowManagerExtension extends Extension {
 
         for (let i = 0; i < MAX_WORKSPACES; i++) {
             const keybindingName = `sage-move-to-workspace-${i + 1}`;
-            Main.wm.addKeybinding(
+            this._addKeybinding(
                 keybindingName,
-                this.getSettings(),
                 Meta.KeyBindingFlags.NONE,
                 Shell.ActionMode.NORMAL,
                 () => this.moveToWorkspace(i)
@@ -459,18 +432,16 @@ export default class SageWindowManagerExtension extends Extension {
 
         for (let i = 0; i < MAX_SCREENS; i++) {
             const moveKeybindingName = `sage-send-window-to-screen-${i + 1}`;
-            Main.wm.addKeybinding(
+            this._addKeybinding(
                 moveKeybindingName,
-                this.getSettings(),
                 Meta.KeyBindingFlags.NONE,
                 Shell.ActionMode.NORMAL,
                 () => this.sendWindowToScreen(i)
             );
 
             const focusKeybindingName = `sage-focus-screen-${i + 1}`;
-            Main.wm.addKeybinding(
+            this._addKeybinding(
                 focusKeybindingName,
-                this.getSettings(),
                 Meta.KeyBindingFlags.NONE,
                 Shell.ActionMode.NORMAL,
                 () => this.focusScreen(i)
@@ -480,20 +451,29 @@ export default class SageWindowManagerExtension extends Extension {
     }
 
     _removeKeybindings() {
-        Main.wm.removeKeybinding('sage-cycle-windows-forward');
-        Main.wm.removeKeybinding('sage-cycle-windows-backward');
-        for (let i = 0; i < MAX_WORKSPACES; i++) {
-            const keybindingName = `sage-move-to-workspace-${i + 1}`;
+        for (const keybindingName of this._keybindingNames) {
             Main.wm.removeKeybinding(keybindingName);
         }
-        for (let i = 0; i < MAX_SCREENS; i++) {
-            Main.wm.removeKeybinding(`sage-send-window-to-screen-${i + 1}`);
-            Main.wm.removeKeybinding(`sage-focus-screen-${i + 1}`);
-        }
+        this._keybindingNames = [];
         console.log('Keybindings removed');
     }
 
+    _addKeybinding(name, flags, actionMode, handler) {
+        Main.wm.addKeybinding(
+            name,
+            this._settings,
+            flags,
+            actionMode,
+            handler,
+        );
+        this._keybindingNames.push(name);
+    }
+
     _disableWorkspaceSwitcherPopup() {
+        if (this._originalDisplay) {
+            return;
+        }
+
         this._originalDisplay = WorkspaceSwitcherPopup.WorkspaceSwitcherPopup.prototype.display;
         WorkspaceSwitcherPopup.WorkspaceSwitcherPopup.prototype.display = function() {};
         console.log('Workspace switcher popup disabled');
