@@ -197,7 +197,6 @@ class SimpleWindowCycler {
 
     _showFocusBorder(window) {
         const rect = window.get_frame_rect();
-        const padding = 5;
 
         if (!this._focusBorderActor) {
             this._focusBorderActor = new St.Widget({
