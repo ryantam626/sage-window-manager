@@ -333,6 +333,41 @@ class WindowScreenManager {
     }
 
     /**
+     * Resolve the most recently active manageable window on a monitor.
+     * @param workspace - Mutter workspace
+     * @param monitor - Mutter monitor
+     * @param {{allowHidden?: boolean, allowMinimized?: boolean, requireVisibleOnWorkspace?: boolean}} options
+     * @returns {import('@girs/meta-12').Meta.Window | null}
+     */
+    _getLastActiveWindow(workspace, monitor, {
+        allowHidden = false,
+        allowMinimized = true,
+        requireVisibleOnWorkspace = false,
+    } = {}) {
+        const tabList = global.display.get_tab_list(Meta.TabList.NORMAL_ALL, workspace);
+
+        return tabList.find(window => {
+            if (window.get_monitor() !== monitor) {
+                return false;
+            }
+
+            if (!_shouldManageWindow(window, {allowHidden})) {
+                return false;
+            }
+
+            if (!allowMinimized && window.minimized) {
+                return false;
+            }
+
+            if (requireVisibleOnWorkspace && !window.showing_on_its_workspace()) {
+                return false;
+            }
+
+            return true;
+        }) ?? null;
+    }
+
+    /**
      * Resolve a logical screen index (keybinding order) into a physical monitor index.
      * @param {number} screenIndex - Zero-based logical screen index.
      * @returns {number}
@@ -407,15 +442,30 @@ class WindowScreenManager {
 
         const currentWorkspace = global.workspace_manager.get_active_workspace();
         let windows = _getEligibleWindows(currentWorkspace, targetMonitor);
+        let windowQueryOptions = {
+            allowHidden: false,
+            allowMinimized: false,
+            requireVisibleOnWorkspace: true,
+        };
 
         if (windows.length === 0) {
             windows = this._getMonitorWindows(currentWorkspace, targetMonitor);
+            windowQueryOptions = {
+                allowHidden: false,
+                allowMinimized: true,
+                requireVisibleOnWorkspace: false,
+            };
         }
 
         // During very fast workspace transitions GNOME may report monitor windows as
         // temporarily hidden; include them as a fallback so focus can still recover.
         if (windows.length === 0) {
             windows = this._getMonitorWindows(currentWorkspace, targetMonitor, {allowHidden: true});
+            windowQueryOptions = {
+                allowHidden: true,
+                allowMinimized: true,
+                requireVisibleOnWorkspace: false,
+            };
         }
 
         if (windows.length === 0) {
@@ -423,7 +473,9 @@ class WindowScreenManager {
             return false;
         }
 
-        this._windowCycler.focusWindow(windows[0]);
+        const lastActiveWindow = this._getLastActiveWindow(currentWorkspace, targetMonitor, windowQueryOptions) ?? windows[0];
+
+        this._windowCycler.focusWindow(lastActiveWindow);
         console.log(`Focused screen ${monitorIndex + 1} (monitor ${targetMonitor + 1})`);
         return true;
     }
