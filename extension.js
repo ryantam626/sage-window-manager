@@ -29,9 +29,10 @@ const WINDOW_SKIP_TYPES = [
 
 /**
  * @param {import('@girs/meta-12').Meta.Window} window
+ * @param allowHidden
  * @returns {boolean}
  */
-function _shouldManageWindow(window) {
+function _shouldManageWindow(window, {allowHidden = false} = {}) {
     if (!window) return false;
 
     const windowType = window.get_window_type();
@@ -40,7 +41,7 @@ function _shouldManageWindow(window) {
         !WINDOW_SKIP_TYPES.includes(windowType) &&
         !window.is_skip_taskbar() &&
         window.get_title() !== '' &&
-        !window.is_hidden()
+        (allowHidden || !window.is_hidden())
     );
 }
 
@@ -132,9 +133,9 @@ class SimpleWindowCycler {
             window.unminimize();
         }
 
-        // Raise and focus
-        window.raise();
-        window.focus(timestamp);
+        // Activate is more reliable than plain focus/raise when a window is
+        // transiently hidden during workspace transition animations.
+        window.activate(timestamp);
     }
 }
 
@@ -203,14 +204,15 @@ class WindowScreenManager {
     }
 
     /**
-     * Get manageable windows on a monitor without visibility/minimized restrictions.
+     * Get manageable windows on a monitor without minimized/showing restrictions.
      * @param workspace - Mutter workspace
      * @param monitor - Mutter monitor
+     * @param {{allowHidden?: boolean}} options
      * @returns {*} Windows
      */
-    _getMonitorWindows(workspace, monitor) {
+    _getMonitorWindows(workspace, monitor, {allowHidden = false} = {}) {
         return workspace.list_windows().filter(window => {
-            return window.get_monitor() === monitor && _shouldManageWindow(window);
+            return window.get_monitor() === monitor && _shouldManageWindow(window, {allowHidden});
         }).sort((a, b) => {
             return b.get_stable_sequence() - a.get_stable_sequence();
         });
@@ -296,6 +298,12 @@ class WindowScreenManager {
             windows = this._getMonitorWindows(currentWorkspace, targetMonitor);
         }
 
+        // During very fast workspace transitions GNOME may report monitor windows as
+        // temporarily hidden; include them as a fallback so focus can still recover.
+        if (windows.length === 0) {
+            windows = this._getMonitorWindows(currentWorkspace, targetMonitor, {allowHidden: true});
+        }
+
         if (windows.length === 0) {
             console.log(`No manageable windows on screen ${monitorIndex + 1} (monitor ${targetMonitor + 1})`);
             return false;
@@ -319,6 +327,7 @@ export default class SageWindowManagerExtension extends Extension {
         this._keybindingNames = [];
         this._workspaceChangedSignalId = null;
         this._workspaceFocusIdleId = null;
+        this._workspaceFocusRequestSerial = 0;
     }
 
     enable() {
@@ -357,21 +366,39 @@ export default class SageWindowManagerExtension extends Extension {
             GLib.source_remove(this._workspaceFocusIdleId);
             this._workspaceFocusIdleId = null;
         }
+        this._workspaceFocusRequestSerial++;
         this._removeKeybindings();
         this._restoreWorkspaceSwitcherPopup();
     }
 
     _onActiveWorkspaceChanged() {
+        this._workspaceFocusRequestSerial++;
+        const requestSerial = this._workspaceFocusRequestSerial;
+        const workspaceIndex = global.workspace_manager.get_active_workspace_index();
+
         if (this._workspaceFocusIdleId) {
             GLib.source_remove(this._workspaceFocusIdleId);
             this._workspaceFocusIdleId = null;
         }
 
-        this._workspaceFocusIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-            this._workspaceFocusIdleId = null;
+        let sourceId = 0;
+        sourceId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            if (this._workspaceFocusIdleId === sourceId) {
+                this._workspaceFocusIdleId = null;
+            }
+
+            if (requestSerial !== this._workspaceFocusRequestSerial) {
+                return GLib.SOURCE_REMOVE;
+            }
+
+            if (workspaceIndex !== global.workspace_manager.get_active_workspace_index()) {
+                return GLib.SOURCE_REMOVE;
+            }
+
             this.focusScreen(0);
             return GLib.SOURCE_REMOVE;
         });
+        this._workspaceFocusIdleId = sourceId;
     }
 
     // Exposed methods for external binding
