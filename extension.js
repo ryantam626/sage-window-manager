@@ -26,7 +26,7 @@ const WINDOW_SKIP_TYPES = [
     Meta.WindowType.DND,
     Meta.WindowType.OVERRIDE_OTHER,
 ];
-const FOCUS_BORDER_HOLD_MS = 450;
+const FOCUS_BORDER_HOLD_MS = 250;
 const FOCUS_BORDER_FADE_MS = 180;
 
 
